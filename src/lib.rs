@@ -16,7 +16,7 @@ use smallvec::smallvec;
 /// Source for video playback or camera streaming.
 #[derive(Debug, Clone)]
 pub enum VideoSource {
-    /// Live RTSP camera stream (e.g., `rtsp://user:pass@192.168.1.3:554/stream2`).
+    /// Live RTSP camera or network stream (e.g., `rtsp://user:pass@10.0.0.1:554/stream1`).
     Rtsp(String),
     /// Local video file path (e.g., `.mp4`, `.mkv`, `.webm`).
     File(PathBuf),

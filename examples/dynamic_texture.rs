@@ -29,7 +29,7 @@ impl Render for VideoMonitor {
                 div()
                     .text_sm()
                     .text_color(rgb(0x94a3b8))
-                    .child("GPU-Accelerated Native Video Canvas for Linux (Vulkan / Wayland)"),
+                    .child("GPU-Accelerated Native Video Canvas for GPUI (Vulkan / Metal / Direct3D)"),
             )
             .child(
                 div()
