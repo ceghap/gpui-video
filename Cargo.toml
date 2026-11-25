@@ -1,0 +1,30 @@
+[package]
+name = "gpui-video"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ashraf Latif <n8y99zlby@mozmail.com>"]
+description = "High-performance video and RTSP streaming widget for GPUI applications"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ceghap/gpui-video"
+readme = "README.md"
+keywords = ["gpui", "video", "rtsp", "streaming", "zed"]
+categories = ["gui", "multimedia::video"]
+
+[dependencies]
+gpui = { git = "https://github.com/zed-industries/zed" }
+gpui_platform = { git = "https://github.com/zed-industries/zed" }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+tokio = { version = "1", features = ["full"] }
+parking_lot = "0.12"
+anyhow = "1.0"
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+
+[[example]]
+name = "dynamic_texture"
+path = "examples/dynamic_texture.rs"
+
+[[example]]
+name = "rtsp_stream"
+path = "examples/rtsp_stream.rs"
