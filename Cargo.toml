@@ -11,8 +11,8 @@ keywords = ["gpui", "video", "rtsp", "streaming", "zed"]
 categories = ["gui", "multimedia::video"]
 
 [dependencies]
-gpui = { git = "https://github.com/zed-industries/zed" }
-gpui_platform = { git = "https://github.com/zed-industries/zed" }
+gpui = { git = "https://github.com/zed-industries/zed", features = ["wayland", "x11"] }
+gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["wayland", "x11"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 tokio = { version = "1", features = ["full"] }
 parking_lot = "0.12"
