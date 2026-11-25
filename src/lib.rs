@@ -1,14 +1,17 @@
+use std::io::Read;
 use std::path::PathBuf;
-use std::process::Stdio;
+use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
 
+use futures::channel::mpsc;
+use futures::StreamExt;
 use gpui::{
     div, img, prelude::*, px, rgb, Context, Render, RenderImage, Task, Window,
 };
 use smallvec::smallvec;
-use tokio::io::AsyncReadExt;
-use tokio::process::Command;
 
 /// Source for video playback or camera streaming.
 #[derive(Debug, Clone)]
@@ -29,7 +32,14 @@ pub struct VideoPlayer {
     frame_count: u64,
     status_text: String,
     is_connected: bool,
+    running: Arc<AtomicBool>,
     _decode_task: Option<Task<()>>,
+}
+
+impl Drop for VideoPlayer {
+    fn drop(&mut self) {
+        self.running.store(false, Ordering::Relaxed);
+    }
 }
 
 impl VideoPlayer {
@@ -50,6 +60,7 @@ impl VideoPlayer {
             frame_count: 0,
             status_text: "Initializing video stream...".to_string(),
             is_connected: false,
+            running: Arc::new(AtomicBool::new(true)),
             _decode_task: None,
         };
 
@@ -59,10 +70,12 @@ impl VideoPlayer {
 
     /// Update the video source dynamically.
     pub fn set_source(&mut self, source: VideoSource, cx: &mut Context<Self>) {
+        self.running.store(false, Ordering::Relaxed);
         self.source = source;
         self.current_frame = None;
         self.is_connected = false;
         self.status_text = "Switching stream...".to_string();
+        self.running = Arc::new(AtomicBool::new(true));
         self.start_decoding(cx);
         cx.notify();
     }
@@ -72,8 +85,13 @@ impl VideoPlayer {
         let width = self.width;
         let height = self.height;
         let fps = self.fps;
+        let running_clone = self.running.clone();
 
-        let task = cx.spawn(async move |this, cx| {
+        let (mut sender, receiver) = mpsc::channel::<(Arc<RenderImage>, u64)>(2);
+        let (status_tx, status_rx) = mpsc::unbounded::<String>();
+
+        // Dedicated OS worker thread for frame ingestion (reactor-independent)
+        thread::spawn(move || {
             let stream_target = match &source {
                 VideoSource::Rtsp(url) => url.clone(),
                 VideoSource::File(path) => path.to_string_lossy().to_string(),
@@ -81,13 +99,10 @@ impl VideoPlayer {
 
             let frame_bytes_len = (width * height * 4) as usize;
             let mut frame_buf = vec![0u8; frame_bytes_len];
+            let mut frame_seq = 0u64;
 
-            loop {
-                let _ = this.update(cx, |this, cx| {
-                    this.status_text = format!("Connecting to stream: {}", stream_target);
-                    this.is_connected = false;
-                    cx.notify();
-                });
+            while running_clone.load(Ordering::Relaxed) {
+                let _ = status_tx.unbounded_send(format!("Connecting to stream: {}", stream_target));
 
                 let mut child = match Command::new("ffmpeg")
                     .args([
@@ -108,17 +123,12 @@ impl VideoPlayer {
                     ])
                     .stdout(Stdio::piped())
                     .stderr(Stdio::null())
-                    .kill_on_drop(true)
                     .spawn()
                 {
                     Ok(c) => c,
                     Err(e) => {
-                        let err_msg = format!("FFmpeg launch failed: {}", e);
-                        let _ = this.update(cx, |this, cx| {
-                            this.status_text = err_msg;
-                            cx.notify();
-                        });
-                        tokio::time::sleep(Duration::from_secs(3)).await;
+                        let _ = status_tx.unbounded_send(format!("FFmpeg launch failed: {}", e));
+                        thread::sleep(Duration::from_secs(3));
                         continue;
                     }
                 };
@@ -126,44 +136,66 @@ impl VideoPlayer {
                 let mut stdout = match child.stdout.take() {
                     Some(s) => s,
                     None => {
-                        tokio::time::sleep(Duration::from_secs(2)).await;
+                        let _ = child.kill();
+                        thread::sleep(Duration::from_secs(2));
                         continue;
                     }
                 };
 
-                let mut first_frame = true;
+                let _ = status_tx.unbounded_send("Live Stream Active".to_string());
 
-                while stdout.read_exact(&mut frame_buf).await.is_ok() {
+                while running_clone.load(Ordering::Relaxed) && stdout.read_exact(&mut frame_buf).is_ok() {
                     if let Some(rgba_image) =
                         image::RgbaImage::from_raw(width, height, frame_buf.clone())
                     {
                         let frame = image::Frame::new(rgba_image);
                         let render_image = Arc::new(RenderImage::new(smallvec![frame]));
+                        frame_seq += 1;
 
-                        let res = this.update(cx, |this, cx| {
-                            this.current_frame = Some(render_image);
-                            this.frame_count += 1;
-                            this.is_connected = true;
-                            if first_frame {
-                                this.status_text = "Live Stream Active".to_string();
-                                first_frame = false;
-                            }
-                            cx.notify();
-                        });
-
-                        if res.is_err() {
-                            return;
-                        }
+                        // Non-blocking try_send ensures real-time playback with zero lag
+                        let _ = sender.try_send((render_image, frame_seq));
                     }
                 }
 
-                let _ = this.update(cx, |this, cx| {
-                    this.status_text = "Stream disconnected. Reconnecting in 2s...".to_string();
-                    this.is_connected = false;
-                    cx.notify();
-                });
+                let _ = child.kill();
+                if !running_clone.load(Ordering::Relaxed) {
+                    break;
+                }
+                let _ = status_tx.unbounded_send("Stream disconnected. Reconnecting...".to_string());
+                thread::sleep(Duration::from_secs(2));
+            }
+        });
 
-                tokio::time::sleep(Duration::from_secs(2)).await;
+        // GPUI Task: receives frames and dispatches to GPUI render loop
+        let task = cx.spawn(async move |this, cx| {
+            let mut status_fuse = status_rx.fuse();
+            let mut frames_fuse = receiver.fuse();
+
+            loop {
+                futures::select! {
+                    status = status_fuse.next() => {
+                        if let Some(s) = status {
+                            let _ = this.update(cx, |this, cx| {
+                                this.status_text = s;
+                                cx.notify();
+                            });
+                        } else {
+                            break;
+                        }
+                    }
+                    frame_item = frames_fuse.next() => {
+                        if let Some((render_image, seq)) = frame_item {
+                            let _ = this.update(cx, |this, cx| {
+                                this.current_frame = Some(render_image);
+                                this.frame_count = seq;
+                                this.is_connected = true;
+                                cx.notify();
+                            });
+                        } else {
+                            break;
+                        }
+                    }
+                }
             }
         });
 
