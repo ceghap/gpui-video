@@ -11,17 +11,21 @@ keywords = ["gpui", "video", "rtsp", "streaming", "zed"]
 categories = ["gui", "multimedia::video"]
 
 [dependencies]
-gpui = { git = "https://github.com/zed-industries/zed", features = ["wayland", "x11"] }
-gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["wayland", "x11"] }
+gpui = { git = "https://github.com/zed-industries/zed" }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
-tokio = { version = "1", features = ["full"] }
-parking_lot = "0.12"
-anyhow = "1.0"
-smallvec = "1"
 futures = "0.3"
+smallvec = "1"
+anyhow = "1.0"
+parking_lot = "0.12"
 
 [dev-dependencies]
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["wayland", "x11"] }
+
+[target.'cfg(not(target_os = "linux"))'.dev-dependencies]
+gpui_platform = { git = "https://github.com/zed-industries/zed" }
 
 [[example]]
 name = "dynamic_texture"
