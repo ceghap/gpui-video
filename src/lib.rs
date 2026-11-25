@@ -281,7 +281,7 @@ impl Render for VideoPlayer {
                             .font_weight(gpui::FontWeight::MEDIUM)
                             .text_color(rgb(0xf8fafc))
                             .child(if is_connected {
-                                format!("LIVE • {} FPS • #{}", self.fps, frame_count)
+                                format!("LIVE • {} FPS", self.fps)
                             } else {
                                 status
                             }),
