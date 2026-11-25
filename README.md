@@ -24,6 +24,9 @@ brew install ffmpeg
 
 # Arch Linux
 sudo pacman -S ffmpeg
+
+# Windows (via winget or chocolatey)
+winget install Gyan.FFmpeg
 ```
 
 ## Installation

@@ -127,8 +127,13 @@ impl VideoPlayer {
                 {
                     Ok(c) => c,
                     Err(e) => {
-                        let _ = status_tx.unbounded_send(format!("FFmpeg launch failed: {}", e));
-                        thread::sleep(Duration::from_secs(3));
+                        let msg = if e.kind() == std::io::ErrorKind::NotFound {
+                            "FFmpeg not found in PATH. Please install FFmpeg (brew / apt / winget).".to_string()
+                        } else {
+                            format!("FFmpeg launch failed: {}", e)
+                        };
+                        let _ = status_tx.unbounded_send(msg);
+                        thread::sleep(Duration::from_secs(4));
                         continue;
                     }
                 };
