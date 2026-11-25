@@ -1,44 +1,93 @@
-# gpui-video 🎥
+# gpui-video
 
-[![Crates.io](https://img.shields.io/crates/v/gpui-video.svg)](https://crates.io/crates/gpui-video)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
+A video playback and real-time RTSP streaming component for [GPUI](https://github.com/zed-industries/zed) (Zed's GPU-accelerated desktop UI framework).
 
-A high-performance, GPU-accelerated video playback and real-time RTSP streaming widget for **GPUI** (Zed's GPU-accelerated desktop UI framework).
+`gpui-video` provides a GPUI `Render` view that decodes and displays video streams and files directly within GPUI applications.
 
 ## Features
 
-- ⚡ **Zero-Copy GPU Uploads**: Efficient frame ingestion into GPUI's image pipeline.
-- 📡 **Real-Time RTSP Streaming**: Native support for low-latency CCTV and IP camera feeds (Tapo, Reolink, ONVIF, Hikvision).
-- 🎞️ **Local Video Playback**: Smooth MP4, MKV, and WebM video playback with correct aspect-ratio letterboxing.
-- 🦀 **Pure Rust Integration**: Designed specifically for the GPUI component model.
+- Real-Time RTSP Streaming: Stream live feeds from IP cameras and network sources with automatic reconnection.
+- Local Video File Playback: Render video files (MP4, MKV, WebM, etc.) within a GPUI view.
+- Aspect-Ratio Handling: Native letterboxing and aspect ratio preservation using GPUI image rendering.
+- Overlay & Status Indicators: Built-in connection state and frame statistics overlay.
 
-## Quick Start
+## Prerequisites
 
-Add `gpui-video` to your `Cargo.toml`:
+`gpui-video` uses `ffmpeg` for asynchronous video decoding. Ensure `ffmpeg` is installed and available on your system `PATH`:
+
+```bash
+# Ubuntu / Debian
+sudo apt install ffmpeg
+
+# macOS
+brew install ffmpeg
+
+# Arch Linux
+sudo pacman -S ffmpeg
+```
+
+## Installation
+
+Add `gpui-video` and `gpui` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-gpui = "0.2.2"
-gpui-video = "0.1"
+gpui = { git = "https://github.com/zed-industries/zed" }
+gpui-video = { git = "https://github.com/ceghap/gpui-video" }
+```
+
+## Usage
+
+```rust
+use gpui::{prelude::*, App, Bounds, WindowBounds, WindowOptions, px, size};
+use gpui_platform::application;
+use gpui_video::{VideoPlayer, VideoSource};
+
+fn main() {
+    application().run(|cx: &mut App| {
+        let bounds = Bounds::centered(None, size(px(960.0), px(540.0)), cx);
+
+        cx.open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(bounds)),
+                ..Default::default()
+            },
+            |_, cx| {
+                cx.new(|cx| {
+                    VideoPlayer::new(
+                        VideoSource::Rtsp("rtsp://username:password@192.168.1.100:554/stream1".into()),
+                        640,
+                        360,
+                        15,
+                        cx,
+                    )
+                })
+            },
+        )
+        .unwrap();
+
+        cx.activate(true);
+    });
+}
 ```
 
 ## Running Examples
 
-### 1. Dynamic Texture Test (60 FPS Test Pattern)
+### Dynamic Texture Test
 ```bash
 cargo run --example dynamic_texture
 ```
 
-### 2. Live RTSP IP Camera Stream
+### Live RTSP Stream
 ```bash
-cargo run --example rtsp_stream -- "rtsp://username:password@192.168.1.3:554/stream2"
+cargo run --example rtsp_stream -- "rtsp://username:password@192.168.1.100:554/stream1"
 ```
 
 ## License
 
-Dual-licensed under either:
+Dual-licensed under either of:
 
-* Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-* MIT license ([LICENSE-MIT](LICENSE-MIT))
+- Apache License, Version 2.0
+- MIT License
 
 at your option.
