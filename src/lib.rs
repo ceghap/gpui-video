@@ -210,7 +210,6 @@ impl VideoPlayer {
 
 impl Render for VideoPlayer {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        let frame_count = self.frame_count;
         let is_connected = self.is_connected;
         let status = self.status_text.clone();
 
